@@ -15,28 +15,44 @@ if str(_SRC) not in sys.path:
 from delivery_ops.adapters.bug_sources.fake_bug_source import FakeBugSourceAdapter
 from delivery_ops.adapters.ingress.direct_invocation import DirectInvocationIngressAdapter
 from delivery_ops.adapters.prd.fake_prd_resolver import FakePrdResolver
-from delivery_ops.adapters.repo.fake_repo_search import FakeRepoSearch
+from delivery_ops.adapters.design.fake_design_adapter import FakeDesignAdapter
+from delivery_ops.adapters.prd.fake_feature_prd_reader import FakeFeaturePrdReader
+from delivery_ops.adapters.repo.fake_feature_repo_search import FakeFeatureRepoSearch
+from delivery_ops.adapters.requirements.fake_requirement_source import FakeRequirementSourceAdapter
 from delivery_ops.application.bugfix.bug_ref_parser import BugRefParser
 from delivery_ops.application.bugfix.bug_severity_ranker import BugSeverityRanker
 from delivery_ops.application.evidence.bug_evidence_builder import BugEvidenceBuilder
 from delivery_ops.application.intent_router import IntentRouter
 from delivery_ops.application.ingress_service import IngressService
 from delivery_ops.application.report_publisher import ReportPublisher
-from delivery_ops.application.risk.bug_risk_judge import BugRiskJudge
+from delivery_ops.application.design.design_context_service import DesignContextService
+from delivery_ops.application.evidence.feature_evidence_builder import FeatureEvidenceBuilder
+from delivery_ops.application.feature.dependency_mapper import DependencyMapper
+from delivery_ops.application.feature.feature_ref_parser import FeatureRefParser
+from delivery_ops.application.feature.feature_readiness_ranker import FeatureReadinessRanker
+from delivery_ops.application.prd.feature_prd_analyzer import FeaturePrdAnalyzer
+from delivery_ops.application.risk.feature_risk_planner import FeatureRiskPlanner
+from delivery_ops.application.work_orders.feature_work_order_compiler import FeatureWorkOrderCompiler
+from delivery_ops.adapters.repo.fake_repo_search import FakeRepoSearch
 from delivery_ops.application.system_handler import SystemHandler
-from delivery_ops.application.work_orders.fix_work_order_compiler import FixWorkOrderCompiler
+from delivery_ops.application.risk.bug_risk_judge import BugRiskJudge
 from delivery_ops.application.workflow_router import WorkflowRouter
 from delivery_ops.domain.reports import AgentReport
 from delivery_ops.graphs.bugfix.graph import BugFixGraph
 from delivery_ops.graphs.feature.graph import FeatureGraph
+from delivery_ops.application.work_orders.fix_work_order_compiler import FixWorkOrderCompiler
+from delivery_ops.storage.in_memory_feature_session import InMemoryFeatureSession
 from delivery_ops.storage.in_memory_bug_fix_session import InMemoryBugFixSession
+
 from delivery_ops.storage.in_memory_task_store import InMemoryTaskStore
 
 DEMO_PROMPTS: tuple[tuple[str, str | None], ...] = (
     ("查看现在有哪些严重 bug", "alice"),
     ("分析第1个bug", "alice"),
     ("生成修复工单 #BUG-001", "alice"),
-    ("查看当前迭代有哪些新功能", None),
+    ("查看当前迭代有哪些新功能", "alice"),
+    ("分析第1个新功能", "alice"),
+    ("生成功能工单 #FEAT-001", "alice"),
     ("随便说句话", None),
 )
 
@@ -44,6 +60,7 @@ DEMO_PROMPTS: tuple[tuple[str, str | None], ...] = (
 def build_adapter() -> DirectInvocationIngressAdapter:
     task_store = InMemoryTaskStore()
     bugfix_session = InMemoryBugFixSession()
+    feature_session = InMemoryFeatureSession()
     ingress_service = IngressService(
         intent_router=IntentRouter(),
         workflow_router=WorkflowRouter(),
@@ -59,7 +76,20 @@ def build_adapter() -> DirectInvocationIngressAdapter:
             work_order_compiler=FixWorkOrderCompiler(),
             session=bugfix_session,
         ),
-        feature_graph=FeatureGraph(task_store=task_store),
+        feature_graph=FeatureGraph(
+            task_store=task_store,
+            requirement_source=FakeRequirementSourceAdapter(),
+            prd_analyzer=FeaturePrdAnalyzer(FakeFeaturePrdReader()),
+            design_service=DesignContextService(FakeDesignAdapter()),
+            repo_search=FakeFeatureRepoSearch(),
+            ranker=FeatureReadinessRanker(),
+            ref_parser=FeatureRefParser(),
+            dependency_mapper=DependencyMapper(),
+            evidence_builder=FeatureEvidenceBuilder(),
+            risk_planner=FeatureRiskPlanner(),
+            work_order_compiler=FeatureWorkOrderCompiler(),
+            session=feature_session,
+        ),
         system_handler=SystemHandler(task_store=task_store),
         report_publisher=ReportPublisher(),
     )
@@ -88,7 +118,7 @@ async def run_demo(adapter: DirectInvocationIngressAdapter) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Direct invocation demo for Delivery Ops Agent (Phase 2 Bug Fix).",
+        description="Direct invocation demo for Delivery Ops Agent (Phase 2/3).",
     )
     parser.add_argument(
         "text",
@@ -99,9 +129,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--bugfix-flow",
         action="store_true",
-        help="Run list → analyze #1 → work order in one process (same session).",
+        help="Run bug list → analyze #1 → work order in one process.",
     )
-    print(parser.parse_args())
+    parser.add_argument(
+        "--feature-flow",
+        action="store_true",
+        help="Run feature list → analyze #1 → work order in one process.",
+    )
     return parser.parse_args()
 
 
@@ -114,6 +148,15 @@ async def run_bugfix_flow(adapter: DirectInvocationIngressAdapter, user_id: str)
     await invoke_once(adapter, f"生成修复工单 #{bug_id}", user_id)
 
 
+async def run_feature_flow(adapter: DirectInvocationIngressAdapter, user_id: str) -> None:
+    list_report = await invoke_once(adapter, "查看当前迭代有哪些新功能", user_id)
+    if not list_report.feature or not list_report.feature.top_features:
+        return
+    feature_id = list_report.feature.top_features[0].feature_id
+    await invoke_once(adapter, "分析第1个新功能", user_id)
+    await invoke_once(adapter, f"生成功能工单 #{feature_id}", user_id)
+
+
 async def main() -> None:
     args = parse_args()
     adapter = build_adapter()
@@ -121,6 +164,11 @@ async def main() -> None:
     if args.bugfix_flow:
         user_id = args.user_id or "demo-user"
         await run_bugfix_flow(adapter, user_id)
+        return
+
+    if args.feature_flow:
+        user_id = args.user_id or "demo-user"
+        await run_feature_flow(adapter, user_id)
         return
 
     if args.text is not None:
@@ -132,7 +180,7 @@ async def main() -> None:
             )
         return
 
-    print("Running built-in demo prompts (use --bugfix-flow for Bug Fix 三步链路):")
+    print("Running built-in demo prompts (--bugfix-flow / --feature-flow for full chains):")
     await run_demo(adapter)
 
 

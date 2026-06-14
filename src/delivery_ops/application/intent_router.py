@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import re
+
 from delivery_ops.domain.intents import TaskIntent
+
+_FEATURE_INDEX_PATTERN = re.compile(r"第\s*\d+\s*个.*(新功能|功能|需求|feature)")
+_BUG_INDEX_PATTERN = re.compile(r"第\s*\d+\s*个.*(bug|缺陷)")
 
 
 class IntentRouter:
     """Phase 1 规则分类器：稳定可测，不依赖 LLM；Phase 2+ 可替换实现。"""
 
-    # 插入顺序即匹配优先级：Bug → Feature → System，避免宽泛关键词误命中。
     _BUG_KEYWORDS: dict[TaskIntent, tuple[str, ...]] = {
         TaskIntent.LIST_SERIOUS_BUGS: (
             "严重 bug",
@@ -22,7 +26,6 @@ class IntentRouter:
             "analyze bug",
             "bug 分析",
             "bug分析",
-            "分析第",
             "个 bug",
             "个bug",
         ),
@@ -51,7 +54,6 @@ class IntentRouter:
             "feature 分析",
             "分析新功能",
             "个新功能",
-            "个功能",
         ),
         TaskIntent.GENERATE_FEATURE_ORDER: (
             "功能工单",
@@ -79,6 +81,12 @@ class IntentRouter:
 
     def classify(self, text: str) -> TaskIntent:
         normalized = text.strip().lower()
+        # 「第 N 个」歧义：Feature/Bug 专属模式优先于泛化关键词。
+        if _FEATURE_INDEX_PATTERN.search(normalized):
+            return TaskIntent.ANALYZE_FEATURE
+        if _BUG_INDEX_PATTERN.search(normalized):
+            return TaskIntent.ANALYZE_BUG
+
         for intent, keywords in (
             *self._BUG_KEYWORDS.items(),
             *self._FEATURE_KEYWORDS.items(),

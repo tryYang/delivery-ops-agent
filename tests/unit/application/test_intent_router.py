@@ -17,5 +17,11 @@ class TestIntentRouter:
     def test_task_status(self) -> None:
         assert self.router.classify("查看任务 #123") == TaskIntent.TASK_STATUS
 
+    def test_analyze_first_new_feature_intent(self) -> None:
+        assert self.router.classify("分析第1个新功能") == TaskIntent.ANALYZE_FEATURE
+
+    def test_analyze_first_bug_intent(self) -> None:
+        assert self.router.classify("分析第1个bug") == TaskIntent.ANALYZE_BUG
+
     def test_unknown(self) -> None:
         assert self.router.classify("随便说句话") == TaskIntent.UNKNOWN

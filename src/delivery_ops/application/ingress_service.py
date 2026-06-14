@@ -32,7 +32,6 @@ class IngressService:
 
     async def handle_message(self, message: NormalizedMessage) -> AgentReport:
         intent = self._intent_router.classify(message.text)
-        # unknown 不创建任务，避免向 TaskStore 写入无业务含义的快照。
         if intent == TaskIntent.UNKNOWN:
             return self._report_publisher.build_unknown(intent)
 
@@ -45,17 +44,14 @@ class IngressService:
                 bugfix=bugfix_state.to_artifacts(),
                 error=bugfix_state.error,
             )
-
-        snapshot = await self._dispatch(workflow, intent, message)
-        return self._report_publisher.build(snapshot, intent)
-
-    async def _dispatch(
-        self,
-        workflow: WorkflowType,
-        intent: TaskIntent,
-        message: NormalizedMessage,
-    ):
-        # Bug / Feature 必须走独立 Graph，禁止在此合并状态机。
         if workflow == WorkflowType.FEATURE_DEVELOPMENT:
-            return await self._feature_graph.run_placeholder(intent, message)
-        return await self._system_handler.handle(intent, message)
+            snapshot, feature_state = await self._feature_graph.run(intent, message)
+            return self._report_publisher.build(
+                snapshot,
+                intent,
+                feature=feature_state.to_artifacts(),
+                error=feature_state.error,
+            )
+
+        snapshot = await self._system_handler.handle(intent, message)
+        return self._report_publisher.build(snapshot, intent)

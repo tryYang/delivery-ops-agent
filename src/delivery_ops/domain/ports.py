@@ -14,6 +14,17 @@ from delivery_ops.domain.bugfix import (
     PrdDocument,
     PrdRef,
 )
+from delivery_ops.domain.features import (
+    DependencyMap,
+    DesignContext,
+    DesignRef,
+    FeatureDetail,
+    FeatureEvidencePacket,
+    FeaturePrdAnalysis,
+    FeatureRiskAssessment,
+    FeatureSummary,
+    FeatureWorkOrder,
+)
 from delivery_ops.domain.intents import TaskIntent
 from delivery_ops.domain.messages import NormalizedMessage
 from delivery_ops.domain.reports import AgentReport
@@ -73,3 +84,42 @@ class FixWorkOrderCompilerPort(Protocol):
         packet: BugEvidencePacket,
         risk: BugRiskAssessment,
     ) -> FixWorkOrder: ...
+
+
+class RequirementSourceAdapter(Protocol):
+    async def list_pending_features(self) -> list[FeatureSummary]: ...
+
+    async def get_feature_detail(self, feature_id: str) -> FeatureDetail | None: ...
+
+
+class DesignAdapter(Protocol):
+    async def resolve_design(self, feature: FeatureDetail) -> DesignRef | None: ...
+
+    async def read_design_context(self, design_ref: DesignRef) -> DesignContext: ...
+
+
+class FeaturePrdReaderPort(Protocol):
+    async def read_and_analyze(self, feature: FeatureDetail) -> FeaturePrdAnalysis | None: ...
+
+
+class FeatureRepoSearchPort(Protocol):
+    async def search_reusable(self, feature: FeatureDetail) -> list[CodeHit]: ...
+
+
+class FeatureEvidenceBuilderPort(Protocol):
+    async def build(
+        self,
+        feature: FeatureDetail,
+        prd: FeaturePrdAnalysis | None,
+        design: DesignContext | None,
+        code_hits: list[CodeHit],
+        dependencies: DependencyMap,
+    ) -> FeatureEvidencePacket: ...
+
+
+class FeatureWorkOrderCompilerPort(Protocol):
+    async def compile(
+        self,
+        packet: FeatureEvidencePacket,
+        risk: FeatureRiskAssessment,
+    ) -> FeatureWorkOrder: ...

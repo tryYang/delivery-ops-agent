@@ -33,7 +33,7 @@ class TestReportPublisher:
             }
         )
         report = self.publisher.build(feature_snapshot, TaskIntent.LIST_FEATURE_TASKS)
-        assert report.message == "Feature workflow placeholder ready"
+        assert report.message == "Top feature candidates ranked."
 
     def test_unknown_message(self) -> None:
         report = self.publisher.build_unknown()
