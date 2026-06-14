@@ -1,5 +1,7 @@
 # Phase 1: Foundation And Direct Invocation
 
+详细实施计划见 [phase-01-detailed-plan.md](phase-01-detailed-plan.md)。
+
 ## Goal
 
 搭建 Delivery Ops Agent 的最小可运行基础设施。首期入口采用直接调用，不实现 Hermes，也不自研完整 Gateway。
