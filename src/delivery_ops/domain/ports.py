@@ -4,6 +4,16 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from delivery_ops.domain.bugfix import (
+    BugDetail,
+    BugEvidencePacket,
+    BugRiskAssessment,
+    BugSummary,
+    CodeHit,
+    FixWorkOrder,
+    PrdDocument,
+    PrdRef,
+)
 from delivery_ops.domain.intents import TaskIntent
 from delivery_ops.domain.messages import NormalizedMessage
 from delivery_ops.domain.reports import AgentReport
@@ -32,3 +42,34 @@ class WorkflowGraph(Protocol):
         intent: TaskIntent,
         message: NormalizedMessage,
     ) -> TaskSnapshot: ...
+
+
+class BugSourceAdapter(Protocol):
+    async def list_open_bugs(self) -> list[BugSummary]: ...
+
+    async def get_bug_detail(self, bug_id: str) -> BugDetail | None: ...
+
+
+class PrdResolverPort(Protocol):
+    async def resolve(self, bug: BugDetail) -> tuple[PrdRef | None, PrdDocument | None]: ...
+
+
+class RepoSearchPort(Protocol):
+    async def search(self, bug: BugDetail) -> list[CodeHit]: ...
+
+
+class BugEvidenceBuilderPort(Protocol):
+    async def build(
+        self,
+        bug: BugDetail,
+        prd: PrdDocument | None,
+        code_hits: list[CodeHit],
+    ) -> BugEvidencePacket: ...
+
+
+class FixWorkOrderCompilerPort(Protocol):
+    async def compile(
+        self,
+        packet: BugEvidencePacket,
+        risk: BugRiskAssessment,
+    ) -> FixWorkOrder: ...

@@ -23,7 +23,7 @@ class TestReportPublisher:
 
     def test_bug_placeholder_message(self) -> None:
         report = self.publisher.build(self.snapshot, TaskIntent.LIST_SERIOUS_BUGS)
-        assert report.message == "Bug Fix workflow placeholder ready"
+        assert report.message == "Top serious bugs ranked."
 
     def test_feature_placeholder_message(self) -> None:
         feature_snapshot = self.snapshot.model_copy(

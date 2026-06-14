@@ -37,6 +37,15 @@ class IngressService:
             return self._report_publisher.build_unknown(intent)
 
         workflow = self._workflow_router.resolve(intent)
+        if workflow == WorkflowType.BUG_FIX:
+            snapshot, bugfix_state = await self._bugfix_graph.run(intent, message)
+            return self._report_publisher.build(
+                snapshot,
+                intent,
+                bugfix=bugfix_state.to_artifacts(),
+                error=bugfix_state.error,
+            )
+
         snapshot = await self._dispatch(workflow, intent, message)
         return self._report_publisher.build(snapshot, intent)
 
@@ -47,8 +56,6 @@ class IngressService:
         message: NormalizedMessage,
     ):
         # Bug / Feature 必须走独立 Graph，禁止在此合并状态机。
-        if workflow == WorkflowType.BUG_FIX:
-            return await self._bugfix_graph.run_placeholder(intent, message)
         if workflow == WorkflowType.FEATURE_DEVELOPMENT:
             return await self._feature_graph.run_placeholder(intent, message)
         return await self._system_handler.handle(intent, message)
